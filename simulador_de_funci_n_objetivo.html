@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Función Objetivo: Optimización Térmica de CPU</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #f8fafc;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+        }
+        .math-box {
+            background: #1e293b;
+            border-left: 4px solid #3b82f6;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            overflow-x: auto;
+        }
+        /* Personalización de Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        select {
+            background-color: #334155;
+            color: white;
+            border: 1px solid #475569;
+        }
+        select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex flex-col gap-6">
+
+    <header class="glass-panel p-6 shadow-lg">
+        <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
+            Análisis de Función Objetivo: Rendimiento vs Temperatura
+        </h1>
+        <p class="text-slate-400 mt-2">
+            Modelación matemática del punto de máximo rendimiento antes del Thermal Throttling utilizando derivadas.
+        </p>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow">
+        
+        <!-- PANEL DE CONTROL (Izquierda) -->
+        <aside class="glass-panel p-6 flex flex-col gap-6 h-fit">
+            <h2 class="text-xl font-semibold border-b border-slate-700 pb-2">Selección de Hardware</h2>
+            
+            <div class="flex flex-col gap-2">
+                <label class="text-sm font-medium text-slate-300">Marca del Procesador</label>
+                <select id="brand-select" class="p-3 rounded-lg w-full transition-colors" onchange="updateCategories()">
+                    <option value="" disabled selected>Seleccione una marca...</option>
+                    <option value="intel">Intel Core</option>
+                    <option value="amd">AMD Ryzen</option>
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label class="text-sm font-medium text-slate-300">Familia / Categoría</label>
+                <select id="category-select" class="p-3 rounded-lg w-full transition-colors" disabled onchange="updateModels()">
+                    <option value="" disabled selected>Esperando marca...</option>
+                </select>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label class="text-sm font-medium text-slate-300">Modelo Específico</label>
+                <select id="model-select" class="p-3 rounded-lg w-full transition-colors" disabled onchange="loadCPUData()">
+                    <option value="" disabled selected>Esperando familia...</option>
+                </select>
+            </div>
+
+            <!-- Resumen de Datos -->
+            <div id="stats-panel" class="mt-4 p-4 bg-slate-800 rounded-lg hidden">
+                <h3 class="text-sm font-bold text-slate-200 mb-3 uppercase tracking-wider">Parámetros del Modelo</h3>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p class="text-slate-400">Rendimiento Base</p>
+                        <p id="stat-pmax" class="text-xl font-bold text-blue-400">--</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-400">Temp. Óptima</p>
+                        <p id="stat-topt" class="text-xl font-bold text-red-400">--</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- PANEL DE VISUALIZACIÓN Y CÁLCULO (Derecha) -->
+        <section class="glass-panel p-6 lg:col-span-2 flex flex-col gap-6">
+            
+            <!-- Contenedor del Gráfico -->
+            <div class="w-full bg-slate-800 rounded-xl p-4 border border-slate-700 relative" style="height: 400px;">
+                <canvas id="perfChart"></canvas>
+                
+                <!-- Overlay Initial -->
+                <div id="chart-overlay" class="absolute inset-0 flex items-center justify-center bg-slate-800 bg-opacity-90 rounded-xl z-10">
+                    <p class="text-slate-400 font-medium">Seleccione un procesador para generar el modelo matemático</p>
+                </div>
+            </div>
+
+            <!-- Desarrollo Matemático -->
+            <div id="math-panel" class="hidden flex-col gap-4">
+                <h2 class="text-xl font-semibold border-b border-slate-700 pb-2">Desarrollo por Cálculo Diferencial</h2>
+                
+                <p class="text-sm text-slate-300">
+                    Se define la Función Objetivo <span class="text-blue-300">$R(T)$</span> que modela el rendimiento (en Puntos/FPS) en función de la temperatura térmica <span class="text-red-300">$T$</span> (en °C). Queremos maximizar esta función.
+                </p>
+
+                <div class="math-box">
+                    <div id="math-eq1" class="text-lg"></div>
+                </div>
+
+                <p class="text-sm text-slate-300">
+                    Para encontrar el rendimiento máximo, derivamos la función objetivo respecto a la temperatura <span class="text-slate-400">$R'(T)$</span> y buscamos los puntos críticos igualando a cero:
+                </p>
+
+                <div class="math-box border-emerald-500">
+                    <div id="math-eq2" class="text-lg"></div>
+                </div>
+
+                <div class="math-box border-purple-500">
+                    <div id="math-eq3" class="text-lg"></div>
+                </div>
+                
+                <p class="text-sm text-emerald-300 font-semibold bg-emerald-900 bg-opacity-30 p-3 rounded text-center">
+                    Conclusión: El procesador debe mantenerse a una temperatura de <span id="math-conclusion"></span> para entregar su máximo rendimiento antes de sufrir Thermal Throttling.
+                </p>
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        // BASE DE DATOS DE PROCESADORES Y SUS PARÁMETROS MATEMÁTICOS
+        // Parámetros: 
+        // pmax = Rendimiento máximo teórico (Vértice en Y)
+        // topt = Temperatura donde se alcanza el máximo (Vértice en X)
+        // a = Coeficiente de concavidad (qué tan brusca es la caída por thermal throttling)
+        const cpuData = {
+            intel: {
+                categories: {
+                    i3: { name: "Core i3", models: [
+                        { id: "i3-12100", name: "Core i3-12100", pmax: 120, topt: 70, a: 0.05 },
+                        { id: "i3-13100", name: "Core i3-13100", pmax: 135, topt: 72, a: 0.055 }
+                    ]},
+                    i5: { name: "Core i5", models: [
+                        { id: "i5-13600K", name: "Core i5-13600K", pmax: 220, topt: 82, a: 0.08 },
+                        { id: "i5-14600K", name: "Core i5-14600K", pmax: 235, topt: 85, a: 0.085 }
+                    ]},
+                    i7: { name: "Core i7", models: [
+                        { id: "i7-13700K", name: "Core i7-13700K", pmax: 280, topt: 88, a: 0.1 },
+                        { id: "i7-14700K", name: "Core i7-14700K", pmax: 305, topt: 92, a: 0.11 }
+                    ]},
+                    i9: { name: "Core i9", models: [
+                        { id: "i9-13900K", name: "Core i9-13900K", pmax: 350, topt: 95, a: 0.15 },
+                        { id: "i9-14900K", name: "Core i9-14900K", pmax: 370, topt: 98, a: 0.16 }
+                    ]}
+                }
+            },
+            amd: {
+                categories: {
+                    r3: { name: "Ryzen 3", models: [
+                        { id: "r3-4100", name: "Ryzen 3 4100", pmax: 110, topt: 68, a: 0.04 }
+                    ]},
+                    r5: { name: "Ryzen 5", models: [
+                        { id: "r5-7600X", name: "Ryzen 5 7600X", pmax: 210, topt: 85, a: 0.07 },
+                        { id: "r5-9600X", name: "Ryzen 5 9600X", pmax: 240, topt: 82, a: 0.06 }
+                    ]},
+                    r7: { name: "Ryzen 7", models: [
+                        { id: "r7-7800X3D", name: "Ryzen 7 7800X3D", pmax: 290, topt: 78, a: 0.12 }, /* Sensible a temperatura por V-Cache */
+                        { id: "r7-9700X", name: "Ryzen 7 9700X", pmax: 295, topt: 88, a: 0.09 }
+                    ]},
+                    r9: { name: "Ryzen 9", models: [
+                        { id: "r9-7950X", name: "Ryzen 9 7950X", pmax: 380, topt: 92, a: 0.14 },
+                        { id: "r9-9950X", name: "Ryzen 9 9950X", pmax: 410, topt: 95, a: 0.15 }
+                    ]}
+                }
+            }
+        };
+
+        let currentChart = null;
+
+        function updateCategories() {
+            const brand = document.getElementById('brand-select').value;
+            const catSelect = document.getElementById('category-select');
+            const modelSelect = document.getElementById('model-select');
+            
+            catSelect.innerHTML = '<option value="" disabled selected>Seleccione una categoría...</option>';
+            modelSelect.innerHTML = '<option value="" disabled selected>Esperando familia...</option>';
+            modelSelect.disabled = true;
+
+            if (brand && cpuData[brand]) {
+                const categories = cpuData[brand].categories;
+                for (const catKey in categories) {
+                    const option = document.createElement('option');
+                    option.value = catKey;
+                    option.textContent = categories[catKey].name;
+                    catSelect.appendChild(option);
+                }
+                catSelect.disabled = false;
+            }
+        }
+
+        function updateModels() {
+            const brand = document.getElementById('brand-select').value;
+            const category = document.getElementById('category-select').value;
+            const modelSelect = document.getElementById('model-select');
+            
+            modelSelect.innerHTML = '<option value="" disabled selected>Seleccione un modelo...</option>';
+
+            if (brand && category && cpuData[brand].categories[category]) {
+                const models = cpuData[brand].categories[category].models;
+                models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    option.textContent = model.name;
+                    modelSelect.appendChild(option);
+                });
+                modelSelect.disabled = false;
+            }
+        }
+
+        function getCPUById(brand, category, modelId) {
+            return cpuData[brand].categories[category].models.find(m => m.id === modelId);
+        }
+
+        function loadCPUData() {
+            const brand = document.getElementById('brand-select').value;
+            const category = document.getElementById('category-select').value;
+            const modelId = document.getElementById('model-select').value;
+
+            if (!brand || !category || !modelId) return;
+
+            const cpu = getCPUById(brand, category, modelId);
+            
+            // Ocultar overlay
+            document.getElementById('chart-overlay').style.display = 'none';
+            document.getElementById('stats-panel').classList.remove('hidden');
+            document.getElementById('math-panel').style.display = 'flex';
+
+            // Actualizar Stats
+            document.getElementById('stat-pmax').textContent = cpu.pmax + " Pts";
+            document.getElementById('stat-topt').textContent = cpu.topt + " °C";
+
+            // MATEMÁTICAS:
+            // Forma de vértice: R(T) = -a(T - Topt)^2 + Pmax
+            // Expandido: R(T) = -a*T^2 + 2*a*Topt*T + (Pmax - a*Topt^2)
+            const A = -cpu.a;
+            const B = 2 * cpu.a * cpu.topt;
+            const C = cpu.pmax - (cpu.a * Math.pow(cpu.topt, 2));
+
+            renderMath(A, B, C, cpu.topt, cpu.pmax);
+            drawChart(A, B, C, cpu.topt, cpu.pmax, brand);
+        }
+
+        function renderMath(A, B, C, Topt, Pmax) {
+            // Generar strings de LaTeX
+            const eq1 = `R(T) = ${A.toFixed(3)}T^2 + ${B.toFixed(3)}T ${C >= 0 ? '+' : ''} ${C.toFixed(3)}`;
+            const eq2 = `R'(T) = \\frac{d}{dT} R(T) = ${(2*A).toFixed(3)}T + ${B.toFixed(3)}`;
+            
+            // Resolución
+            const eq3 = `
+                \\begin{aligned}
+                R'(T) &= 0 \\\\
+                ${(2*A).toFixed(3)}T + ${B.toFixed(3)} &= 0 \\\\
+                ${(2*A).toFixed(3)}T &= -${B.toFixed(3)} \\\\
+                T &= \\frac{-${B.toFixed(3)}}{${(2*A).toFixed(3)}} \\\\
+                T &= ${Topt}^{\\circ}\\text{C} \\quad \\text{(Punto Crítico Máximo)}
+                \\end{aligned}
+            `;
+
+            katex.render(eq1, document.getElementById('math-eq1'), { displayMode: true, throwOnError: false });
+            katex.render(eq2, document.getElementById('math-eq2'), { displayMode: true, throwOnError: false });
+            katex.render(eq3, document.getElementById('math-eq3'), { displayMode: true, throwOnError: false });
+
+            document.getElementById('math-conclusion').textContent = `${Topt}°C`;
+        }
+
+        function drawChart(A, B, C, Topt, Pmax, brand) {
+            const ctx = document.getElementById('perfChart').getContext('2d');
+            
+            // Destruir gráfico anterior si existe
+            if (currentChart) {
+                currentChart.destroy();
+            }
+
+            // Generar datos para la curva
+            const dataPoints = [];
+            const labels = [];
+            
+            // Generamos puntos desde 20°C hasta 110°C
+            for (let t = 20; t <= 110; t += 2) {
+                labels.push(t);
+                let r = (A * t * t) + (B * t) + C;
+                // El rendimiento no puede ser negativo
+                if (r < 0) r = 0;
+                dataPoints.push({ x: t, y: r });
+            }
+
+            // Color basado en la marca (Azul Intel, Rojo AMD)
+            const brandColor = brand === 'intel' ? 'rgba(59, 130, 246, 1)' : 'rgba(239, 68, 68, 1)';
+            const brandBg = brand === 'intel' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+
+            currentChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Curva de Rendimiento R(T)',
+                            data: dataPoints,
+                            borderColor: brandColor,
+                            backgroundColor: brandBg,
+                            borderWidth: 3,
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 0,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: 'Punto de Optimización (Vértice)',
+                            data: [{ x: Topt, y: Pmax }],
+                            backgroundColor: '#10b981', // Verde esmeralda
+                            borderColor: '#ffffff',
+                            borderWidth: 2,
+                            pointRadius: 8,
+                            pointHoverRadius: 10,
+                            type: 'scatter'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    color: '#cbd5e1',
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#cbd5e1', font: { family: 'Inter' } }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Rendimiento: ${context.raw.y.toFixed(1)} Pts a ${context.raw.x}°C`;
+                                }
+                            }
+                        },
+                        annotation: {
+                            // Se podría añadir el plugin de anotaciones para líneas asintóticas, 
+                            // pero lo mantendremos ligero sin dependencias extra.
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: 'Temperatura (°C)', color: '#94a3b8' },
+                            grid: { color: '#334155' },
+                            min: 20,
+                            max: 110
+                        },
+                        y: {
+                            title: { display: true, text: 'Rendimiento Efectivo (Puntos)', color: '#94a3b8' },
+                            grid: { color: '#334155' },
+                            min: 0,
+                            suggestedMax: Pmax * 1.2
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
